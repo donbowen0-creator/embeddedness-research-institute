@@ -1,7 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Community Embeddedness & Recovery Embeddedness Research</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Criminogenic Embeddedness & Recovery Embeddedness Research</title>
 <style>
 body{
 font-family:Arial,sans-serif;
@@ -41,40 +43,57 @@ padding:20px;
 border-radius:10px;
 margin-bottom:20px;
 }
+
+/* Blog posts */
+.post-date{
+color:#666;
+font-size:0.9em;
+margin-top:-10px;
+}
+
+.new-post{
+text-align:right;
+font-size:0.85em;
+}
+
+.new-post a{
+color:#999;
+text-decoration:none;
+}
 </style>
 </head>
 
 <body>
 
 <header>
-<h1>Community Embeddedness Model (CEM)</h1>
+<h1>Criminogenic Embeddedness Model (CEM)</h1>
 <h2>Recovery Embeddedness Model (REM)</h2>
 <p>Advancing the Science of Desistance, Recovery, and Community Integration</p>
 </header>
 
 <nav>
-#aboutAbout</a>
-#cemCEM</a>
-#remREM</a>
-#researchResearch</a>
-<alogBlog</a>
-<a hreftContact</a>
+<a href="#about">About</a>
+<a href="#cem">CEM</a>
+<a href="#rem">REM</a>
+<a href="#research">Research</a>
+<a href="#blog">Blog</a>
+<a href="#contact">Contact</a>
 </nav>
 
 <section id="about">
 <h2>About</h2>
 
 <p>
-This website serves as the official research hub for the Community Embeddedness Model (CEM) and Recovery Embeddedness Model (REM).
+This website serves as the official research hub for the Criminogenic Embeddedness Model (CEM) and Recovery Embeddedness Model (REM).
 </p>
 </section>
 
 <section id="cem">
-<h2>Community Embeddedness Model</h2>
+<h2>Criminogenic Embeddedness Model</h2>
 
 <div class="card">
 <p>
-The Community Embeddedness Model proposes that long-term desistance from crime occurs through increasing integration into prosocial communities, institutions, and social relationships.
+The Criminogenic Embeddedness Model is a life-course framework that integrates strain, social control, and social learning to explain criminal trajectories. It proposes that the onset, persistence, and desistance of offending depend on how deeply a person is embedded in criminogenic networks and settings, and it asks why people exposed to the same conditions so often arrive at different outcomes.
 </p>
 </div>
 </section>
@@ -104,15 +123,11 @@ The Recovery Embeddedness Model extends embeddedness theory to addiction recover
 <section id="blog">
 <h2>Research Updates Blog</h2>
 
-<div class="card">
-<h3>September 2026</h3>
-<p>CEM Health Outcomes Validation Study completed and prepared for journal submission.</p>
-</div>
+<!-- Posts are loaded from posts.json. To write one, use the "New post" link
+     below (it opens post.html); you never need to edit this file for posts. -->
+<div id="posts"><p>Loading posts…</p></div>
 
-<div class="card">
-<h3>Current Project</h3>
-<p>Development of the Recovery Embeddedness Model conceptual framework is underway.</p>
-</div>
+<p class="new-post"><a href="post.html">✎ New post</a></p>
 </section>
 
 <section id="contact">
@@ -127,9 +142,41 @@ For collaboration opportunities, research partnerships, or speaking engagements,
 
 <footer>
 <p>
-© 2026 Donald Bowen. Community Embeddedness Model (CEM) and Recovery Embeddedness Model (REM). All Rights Reserved.
+© 2026 Donald Bowen. Criminogenic Embeddedness Model (CEM) and Recovery Embeddedness Model (REM). All Rights Reserved.
 </p>
 </footer>
 
+
+<script>
+// Loads the blog posts from posts.json and shows them, newest first.
+(function () {
+  var box = document.getElementById("posts");
+  function esc(t) {
+    return String(t).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function niceDate(d) {
+    var p = String(d).split("-");
+    if (p.length !== 3) return esc(d);
+    var dt = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return dt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  }
+  fetch("posts.json?t=" + Date.now())
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (posts) {
+      posts.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+      if (!posts.length) { box.innerHTML = "<p>No posts yet.</p>"; return; }
+      box.innerHTML = posts.map(function (p) {
+        var paras = String(p.body || "").split(/\n\s*\n/).map(function (x) {
+          return "<p>" + esc(x.trim()).replace(/\n/g, "<br>") + "</p>";
+        }).join("");
+        return '<div class="card"><h3>' + esc(p.title) + '</h3><p class="post-date">' +
+               niceDate(p.date) + "</p>" + paras + "</div>";
+      }).join("");
+    })
+    .catch(function () { box.innerHTML = "<p>Blog posts could not be loaded right now.</p>"; });
+})();
+</script>
 </body>
 </html>

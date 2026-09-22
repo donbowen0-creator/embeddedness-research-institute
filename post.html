@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>New blog post</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:800px;margin:auto;padding:20px;line-height:1.6;}
+header{background:#163A5F;color:white;padding:20px 30px;border-radius:10px;}
+header h1{margin:0;font-size:1.5em;}
+label{display:block;font-weight:bold;margin-top:18px;}
+input,textarea{width:100%;box-sizing:border-box;padding:10px;font:inherit;border:1px solid #bbb;border-radius:6px;}
+textarea{min-height:260px;}
+.hint{color:#666;font-size:0.85em;margin:4px 0 0;}
+button{margin-top:20px;background:#163A5F;color:white;border:0;padding:12px 22px;border-radius:6px;font:inherit;font-weight:bold;cursor:pointer;}
+button:disabled{opacity:0.5;cursor:default;}
+button.small{background:#999;padding:4px 10px;margin:0 0 0 10px;font-size:0.8em;}
+.card{background:#f5f5f5;padding:14px 18px;border-radius:10px;margin-bottom:10px;}
+#status{margin-top:18px;padding:12px;border-radius:6px;display:none;}
+#status.ok{display:block;background:#e6f4ea;}
+#status.err{display:block;background:#fdecea;}
+details{margin-top:18px;}
+a{color:#163A5F;}
+</style>
+</head>
+<body>
+
+<header><h1>New blog post</h1></header>
+<p><a href="index.html#blog">← Back to the site</a></p>
+
+<label for="token">GitHub access token</label>
+<input id="token" type="password" autocomplete="off" placeholder="Paste your token here">
+<p class="hint">Needed each time you open this page. It is kept only in this browser tab and is never saved to the site.</p>
+
+<label for="title">Title</label>
+<input id="title" type="text">
+
+<label for="date">Date</label>
+<input id="date" type="date">
+
+<label for="body">Post</label>
+<textarea id="body" placeholder="Write your post here. Leave a blank line between paragraphs."></textarea>
+
+<button id="publish">Publish post</button>
+<div id="status"></div>
+
+<details>
+<summary>Manage existing posts</summary>
+<p class="hint">Enter your token above first. Deleting a post removes it from the site.</p>
+<button class="small" id="load">Load posts</button>
+<div id="list"></div>
+</details>
+
+<details>
+<summary>Settings</summary>
+<label for="repo">Repository (owner/name)</label>
+<input id="repo" type="text">
+<p class="hint">Filled in automatically from this page's address. Change it only if it is wrong.</p>
+</details>
+
+<script>
+// Guess the repository from the GitHub Pages address:
+//   https://OWNER.github.io/REPO/post.html  -> OWNER/REPO
+//   https://OWNER.github.io/post.html       -> OWNER/OWNER.github.io
+(function () {
+  var host = location.hostname, parts = location.pathname.split("/").filter(Boolean);
+  var owner = host.endsWith(".github.io") ? host.replace(".github.io", "") : "";
+  var repo = (parts.length > 1) ? parts[0] : (owner ? owner + ".github.io" : "");
+  document.getElementById("repo").value = owner ? owner + "/" + repo : "";
+  document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+  var saved = sessionStorage.getItem("gh_token");
+  if (saved) document.getElementById("token").value = saved;
+})();
+
+var FILE = "posts.json";
+var statusBox = document.getElementById("status");
+function say(msg, ok) { statusBox.className = ok ? "ok" : "err"; statusBox.textContent = msg; }
+
+// Text <-> base64 that handles accents, curly quotes, and other non-ASCII characters
+function toB64(str) {
+  var bytes = new TextEncoder().encode(str), bin = "";
+  bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+function fromB64(b64) {
+  var bin = atob(b64.replace(/\s/g, "")), bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function api(method, body) {
+  var token = document.getElementById("token").value.trim();
+  var repo = document.getElementById("repo").value.trim();
+  if (!token) return Promise.reject(new Error("Paste your GitHub access token first."));
+  if (!/^[^/]+\/[^/]+$/.test(repo)) return Promise.reject(new Error("The repository setting should look like owner/name."));
+  sessionStorage.setItem("gh_token", token);
+  return fetch("https://api.github.com/repos/" + repo + "/contents/" + FILE, {
+    method: method,
+    headers: { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json" },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function (r) {
+    if (r.status === 404 && method === "GET") return null;          // no posts.json yet
+    if (r.status === 401) throw new Error("GitHub rejected the token. Check that it is pasted correctly and has not expired.");
+    if (r.status === 403) throw new Error("The token does not have permission to change this repository. It needs Contents: Read and write.");
+    if (r.status === 409) throw new Error("The posts file changed while you were working. Try again.");
+    if (!r.ok) throw new Error("GitHub returned an error (" + r.status + ").");
+    return r.json();
+  });
+}
+
+function readPosts() {
+  return api("GET").then(function (f) {
+    if (!f) return { posts: [], sha: undefined };
+    return { posts: JSON.parse(fromB64(f.content)), sha: f.sha };
+  });
+}
+
+function savePosts(posts, sha, message) {
+  posts.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+  return api("PUT", { message: message, content: toB64(JSON.stringify(posts, null, 2) + "\n"), sha: sha });
+}
+
+document.getElementById("publish").onclick = function () {
+  var btn = this;
+  var title = document.getElementById("title").value.trim();
+  var date = document.getElementById("date").value;
+  var body = document.getElementById("body").value.trim();
+  if (!title || !date || !body) { say("Please fill in the title, date, and post.", false); return; }
+  btn.disabled = true; say("Publishing…", true);
+  readPosts()
+    .then(function (r) {
+      r.posts.unshift({ title: title, date: date, body: body });
+      return savePosts(r.posts, r.sha, "Blog post: " + title);
+    })
+    .then(function () {
+      say("Published. It will appear on the site within a minute or two.", true);
+      document.getElementById("title").value = "";
+      document.getElementById("body").value = "";
+    })
+    .catch(function (e) { say(e.message, false); })
+    .then(function () { btn.disabled = false; });
+};
+
+document.getElementById("load").onclick = function () {
+  var list = document.getElementById("list");
+  list.textContent = "Loading…";
+  readPosts().then(function (r) {
+    list.innerHTML = "";
+    if (!r.posts.length) { list.textContent = "No posts yet."; return; }
+    r.posts.forEach(function (p, i) {
+      var div = document.createElement("div"); div.className = "card";
+      div.textContent = p.date + " — " + p.title;
+      var del = document.createElement("button"); del.className = "small"; del.textContent = "Delete";
+      del.onclick = function () {
+        if (!confirm('Delete "' + p.title + '"? This cannot be undone from this page.')) return;
+        del.disabled = true;
+        readPosts().then(function (fresh) {
+          var keep = fresh.posts.filter(function (q) { return !(q.title === p.title && q.date === p.date); });
+          return savePosts(keep, fresh.sha, "Delete blog post: " + p.title);
+        }).then(function () { div.remove(); say("Deleted. The site will update within a minute or two.", true); })
+          .catch(function (e) { say(e.message, false); del.disabled = false; });
+      };
+      div.appendChild(del); list.appendChild(div);
+    });
+  }).catch(function (e) { list.textContent = ""; say(e.message, false); });
+};
+</script>
+</body>
+</html>
